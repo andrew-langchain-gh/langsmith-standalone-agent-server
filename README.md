@@ -30,6 +30,8 @@ deploy/
   shared-datastores.yaml        shared Postgres + Redis (namespace langgraph-shared)
   weather-values.yaml           Helm values for the weather release
   calculator-values.yaml        Helm values for the calculator release
+scripts/
+  invoke-agent.sh               call a deployed agent and print its reply
 docs/
   portable-deployment-guide.md  reproducible on any cluster  ← start here
   deployment-guide.md           this-cluster walkthrough

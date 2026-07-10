@@ -29,6 +29,25 @@ export AGENT=http://<your-agent-address>
 
 ---
 
+## 0. Quick start: the invoke script
+
+The repo ships a helper that finds the agent's address and runs a prompt:
+
+```bash
+scripts/invoke-agent.sh -n weather    "What is the weather in Tokyo?"
+scripts/invoke-agent.sh -n calculator "What is (12 * 8) + 5?"
+
+# stateful conversation (remembers previous turns):
+scripts/invoke-agent.sh -n weather --new-thread "Weather in Tokyo?"     # prints a thread id
+scripts/invoke-agent.sh -n weather -t <thread-id> "Warmer than London?"
+
+# streaming, or point at any URL (e.g. a port-forward):
+scripts/invoke-agent.sh -n weather --stream "Weather in London?"
+scripts/invoke-agent.sh -u http://localhost:8123 -a weather "Weather in Paris?"
+```
+
+The rest of this doc shows the raw API the script is built on.
+
 ## 1. Interactive API docs (easiest to explore)
 
 Open **`$AGENT/docs`** in a browser for a full Swagger UI with "Try it out" buttons for
