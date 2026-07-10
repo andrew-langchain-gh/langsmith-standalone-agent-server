@@ -298,6 +298,31 @@ helm install weather-agent langchain/langgraph-cloud -n weather -f values.yaml \
 kubectl -n weather rollout status deploy/weather-agent-langgraph-cloud-api-server
 ```
 
+### What gets created per agent
+
+Each `helm install` (one per agent) creates the following in that agent's namespace,
+where `<rel>` is the release name (e.g. `weather-agent`). Note there is **one workload
+only** — the Agent Server; Postgres and Redis are **not** created here (they're external
+and shared, from Step 4).
+
+| Kind | Name (`<rel>` = release) | Created by | Purpose |
+| --- | --- | --- | --- |
+| **Deployment** | `<rel>-langgraph-cloud-api-server` | chart | the Agent Server — runs your image (1 replica by default) |
+| Pod | `<rel>-langgraph-cloud-api-server-<hash>` | the Deployment | the running container |
+| **Service** | `<rel>-langgraph-cloud-api-server` | chart | exposes the server (ports 80/443 → container 8000); type = `apiServer.service.type` |
+| Ingress | `<rel>-langgraph-cloud-ingress` | chart | **only if** `ingress.enabled: true` |
+| ServiceAccount | `<rel>-langgraph-cloud-api-server` | chart | identity for the api-server pod |
+| ServiceAccount | `<rel>-langgraph-cloud-queue` | chart | identity for the background queue workers |
+| Secret | `<rel>-langgraph-cloud-postgres` | chart | the Postgres connection URL you passed via `--set-string` |
+| Secret | `<rel>-langgraph-cloud-redis` | chart | the Redis connection URL |
+| Secret | `agent-secrets` | you (Step 5) | license / LangSmith / model keys (`existingSecretName`) |
+| Secret | `<pull-secret>` (e.g. `regcred`) | you | image pull secret — **only for a private registry** |
+| Secret | `sh.helm.release.v1.<rel>.v*` | Helm | release history/bookkeeping — ignore |
+
+Inspect them any time with `kubectl -n <namespace> get all,ingress,secret,serviceaccount`.
+Deploying a second agent repeats this entire set in its own namespace — fully
+independent, pointing at the same shared Postgres/Redis.
+
 ---
 
 ## Step 6 — Reach it and verify
