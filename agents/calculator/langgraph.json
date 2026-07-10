@@ -1,0 +1,6 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "calculator": "./graph.py:graph"
+  }
+}

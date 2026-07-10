@@ -1,0 +1,81 @@
+# Helm values for the WEATHER standalone Agent Server.
+#   release:   weather-agent
+#   namespace: weather
+#   chart:     langchain/langgraph-cloud
+#
+# This file contains NO secrets. The license key, LangSmith key, and Anthropic key
+# come from a Secret you create in the `weather` namespace; the password-bearing
+# Postgres/Redis connection URLs are passed with `--set-string` at install time.
+# See docs/deployment-guide.md for the exact commands.
+
+# The agent image you built with `langgraph build` and pushed to Docker Hub.
+# Replace YOUR_DOCKERHUB_USER, or override at install with:
+#   --set images.apiServerImage.repository=docker.io/$DOCKERHUB_USER/weather-agent
+# `imagePullSecrets` references a docker-registry secret you create in this namespace
+# (needed for a PRIVATE repo; delete both if you publish the repo publicly).
+images:
+  apiServerImage:
+    repository: docker.io/YOUR_DOCKERHUB_USER/weather-agent
+    tag: "0.1"
+    pullPolicy: Always
+  imagePullSecrets:
+    - name: dockerhub
+
+# License + LangSmith API key are read from this Secret.
+# It must contain keys: langgraph_cloud_license_key, api_key
+config:
+  existingSecretName: agent-secrets
+
+apiServer:
+  service:
+    type: LoadBalancer
+  deployment:
+    # Inject the Anthropic key at runtime — never baked into the image.
+    extraEnv:
+      - name: ANTHROPIC_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: agent-secrets
+            key: ANTHROPIC_API_KEY
+    # The chart's default probe timeout is 1s, but a cold `python healthcheck.py`
+    # takes longer, so the pod never passes startup and CrashLoopBackOffs. Give the
+    # probes a realistic 5s timeout (and startup enough attempts to boot).
+    startupProbe:
+      exec:
+        command: ["/bin/sh", "-c", "exec python /api/healthcheck.py"]
+      timeoutSeconds: 5
+      periodSeconds: 10
+      failureThreshold: 12
+    readinessProbe:
+      exec:
+        command: ["/bin/sh", "-c", "exec python /api/healthcheck.py"]
+      timeoutSeconds: 5
+      periodSeconds: 10
+      failureThreshold: 6
+    livenessProbe:
+      exec:
+        command: ["/bin/sh", "-c", "exec python /api/healthcheck.py"]
+      timeoutSeconds: 5
+      periodSeconds: 30
+      failureThreshold: 6
+
+# Use the SHARED Postgres + Redis (namespace langgraph-shared), not bundled ones.
+# `enabled: true` here means "use an EXTERNAL instance" (disables the bundled one).
+# connectionUrl is supplied via --set-string at install (contains the password):
+#   postgres://postgres:<PW>@postgres.langgraph-shared.svc.cluster.local:5432/weather?sslmode=disable
+#   redis://redis.langgraph-shared.svc.cluster.local:6379/1
+postgres:
+  external:
+    enabled: true
+redis:
+  external:
+    enabled: true
+
+# Optional: expose via an Ingress in addition to / instead of the LoadBalancer above.
+# Point the hostname's DNS (or /etc/hosts) at your ingress controller's address.
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: weather.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m

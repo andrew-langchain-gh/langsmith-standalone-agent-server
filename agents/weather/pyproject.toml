@@ -1,0 +1,19 @@
+[project]
+name = "weather-agent"
+version = "0.1.0"
+description = "Standalone Agent Server demo — weather agent (Claude + get_weather tool)"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "langgraph>=1.0,<2.0",
+    "langchain>=1.0,<2.0",
+    "langchain-core>=1.0,<2.0",
+    "langchain-anthropic>=0.3,<1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# The agent is a single top-level module (graph.py), not a package tree.
+[tool.setuptools]
+py-modules = ["graph"]

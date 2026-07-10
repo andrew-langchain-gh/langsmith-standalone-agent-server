@@ -1,0 +1,123 @@
+# Shared Postgres + Redis for ALL demo Agent Servers.
+#
+# Both agent releases (weather, calculator) point at these two instances instead of
+# each bundling its own. They stay isolated by using a different Postgres DATABASE
+# (weather / calculator) and a different Redis DB NUMBER (/1, /2) per deployment —
+# the sharing pattern documented for standalone servers.
+#
+# Prerequisite (see the deployment guide): create the Postgres password secret first:
+#   kubectl -n langgraph-shared create secret generic postgres-credentials \
+#     --from-literal=password="$PG_PASSWORD"
+# then create the per-agent databases after the pod is up:
+#   CREATE DATABASE weather;  CREATE DATABASE calculator;
+#
+# Datastore minimums for standalone servers: Postgres >= 14, Redis >= 5. The Agent
+# Server auto-installs the required PG extensions (btree_gin, btree_gist, pgcrypto,
+# citext, ltree, pg_trgm) at startup using the superuser role below.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: langgraph-shared
+---
+# Headless service → stable DNS: postgres.langgraph-shared.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: langgraph-shared
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: langgraph-shared
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: POSTGRES_DB
+              value: postgres
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: langgraph-shared
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: langgraph-shared
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10

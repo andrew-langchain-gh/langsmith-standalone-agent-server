@@ -1,0 +1,70 @@
+# Helm values for the CALCULATOR standalone Agent Server.
+#   release:   calculator-agent
+#   namespace: calculator
+#   chart:     langchain/langgraph-cloud
+#
+# Identical shape to weather-values.yaml — the ONLY differences are the image, the
+# ingress hostname, and (passed via --set at install) the Postgres database name
+# `calculator` and Redis DB number `/2`. Two separate releases, one shared datastore.
+#
+# No secrets in this file; see docs/deployment-guide.md for secret + --set commands.
+
+# Replace YOUR_DOCKERHUB_USER, or override at install with:
+#   --set images.apiServerImage.repository=docker.io/$DOCKERHUB_USER/calculator-agent
+images:
+  apiServerImage:
+    repository: docker.io/YOUR_DOCKERHUB_USER/calculator-agent
+    tag: "0.1"
+    pullPolicy: Always
+  imagePullSecrets:
+    - name: dockerhub
+
+config:
+  existingSecretName: agent-secrets
+
+apiServer:
+  service:
+    type: LoadBalancer
+  deployment:
+    extraEnv:
+      - name: ANTHROPIC_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: agent-secrets
+            key: ANTHROPIC_API_KEY
+    # Realistic probe timeouts (chart default of 1s is too tight — see weather-values.yaml).
+    startupProbe:
+      exec:
+        command: ["/bin/sh", "-c", "exec python /api/healthcheck.py"]
+      timeoutSeconds: 5
+      periodSeconds: 10
+      failureThreshold: 12
+    readinessProbe:
+      exec:
+        command: ["/bin/sh", "-c", "exec python /api/healthcheck.py"]
+      timeoutSeconds: 5
+      periodSeconds: 10
+      failureThreshold: 6
+    livenessProbe:
+      exec:
+        command: ["/bin/sh", "-c", "exec python /api/healthcheck.py"]
+      timeoutSeconds: 5
+      periodSeconds: 30
+      failureThreshold: 6
+
+# Shared Postgres + Redis. connectionUrl supplied via --set-string at install:
+#   postgres://postgres:<PW>@postgres.langgraph-shared.svc.cluster.local:5432/calculator?sslmode=disable
+#   redis://redis.langgraph-shared.svc.cluster.local:6379/2
+postgres:
+  external:
+    enabled: true
+redis:
+  external:
+    enabled: true
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: calculator.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
